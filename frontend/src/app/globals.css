@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --bg-primary: #0f172a;
+  --bg-card: #1e293b;
+  --bg-sidebar: #0a0f1e;
+  --border: rgba(148, 163, 184, 0.15);
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --accent-cyan: #06b6d4;
+  --accent-emerald: #10b981;
+  --accent-amber: #f59e0b;
+  --accent-red: #ef4444;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #1e293b; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* Utility classes */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+}
+
+.badge-critical { @apply text-red-400 bg-red-400/10 border border-red-400/20 px-2 py-0.5 rounded-full text-xs font-medium; }
+.badge-high { @apply text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded-full text-xs font-medium; }
+.badge-medium { @apply text-cyan-400 bg-cyan-400/10 border border-cyan-400/20 px-2 py-0.5 rounded-full text-xs font-medium; }
+.badge-low { @apply text-slate-400 bg-slate-400/10 border border-slate-400/20 px-2 py-0.5 rounded-full text-xs font-medium; }
+
+.badge-active { @apply text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 px-2 py-0.5 rounded-full text-xs font-medium; }
+.badge-pending { @apply text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded-full text-xs font-medium; }
+.badge-completed { @apply text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 px-2 py-0.5 rounded-full text-xs font-medium; }
+.badge-failed { @apply text-red-400 bg-red-400/10 border border-red-400/20 px-2 py-0.5 rounded-full text-xs font-medium; }
+.badge-missed { @apply text-red-400 bg-red-400/10 border border-red-400/20 px-2 py-0.5 rounded-full text-xs font-medium; }
