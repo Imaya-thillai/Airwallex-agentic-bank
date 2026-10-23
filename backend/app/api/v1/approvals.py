@@ -1,7 +1,8 @@
+import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Any
 from datetime import datetime, timezone, timedelta
 import hashlib, json
 from ...core.database import get_db
@@ -27,6 +28,18 @@ def _canonical_hash(action_type: str, payload: dict) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
+def _to_uuid(val: Any) -> uuid.UUID:
+    if isinstance(val, uuid.UUID):
+        return val
+    return uuid.UUID(str(val))
+
+
+def _ensure_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 @router.get("/approvals")
 def list_approvals(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     approvals = (
@@ -36,11 +49,12 @@ def list_approvals(db: Session = Depends(get_db), current_user=Depends(get_curre
         .limit(50)
         .all()
     )
-    # Auto-expire
+    # Auto-expire safely handling offset-naive SQLite datetimes
     now = datetime.now(timezone.utc)
     for a in approvals:
-        if a.status == "pending" and a.expires_at < now:
-            a.status = "expired"
+        if a.status == "pending" and a.expires_at:
+            if _ensure_utc(a.expires_at) < now:
+                a.status = "expired"
     db.commit()
 
     return {
@@ -51,9 +65,9 @@ def list_approvals(db: Session = Depends(get_db), current_user=Depends(get_curre
                 "action_payload": a.action_payload,
                 "canonical_hash": a.canonical_hash,
                 "status": a.status,
-                "expires_at": a.expires_at.isoformat(),
+                "expires_at": a.expires_at.isoformat() if a.expires_at else None,
                 "review_notes": a.review_notes,
-                "created_at": a.created_at.isoformat(),
+                "created_at": a.created_at.isoformat() if a.created_at else None,
             }
             for a in approvals
         ]
@@ -67,7 +81,6 @@ def create_approval(
     current_user=Depends(get_current_user),
 ):
     h = _canonical_hash(req.action_type, req.action_payload)
-    # Check for duplicate pending approval
     existing = db.query(ApprovalRequest).filter(
         ApprovalRequest.canonical_hash == h,
         ApprovalRequest.status == "pending",
@@ -96,11 +109,16 @@ def approve_request(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    approval = db.query(ApprovalRequest).filter(ApprovalRequest.id == approval_id).first()
+    try:
+        appr_uuid = _to_uuid(approval_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid approval UUID")
+
+    approval = db.query(ApprovalRequest).filter(ApprovalRequest.id == appr_uuid).first()
     if not approval:
         raise HTTPException(status_code=404, detail="Approval not found")
     now = datetime.now(timezone.utc)
-    if approval.expires_at < now:
+    if approval.expires_at and _ensure_utc(approval.expires_at) < now:
         approval.status = "expired"
         db.commit()
         raise HTTPException(status_code=410, detail="Approval has expired")
@@ -121,7 +139,12 @@ def reject_request(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    approval = db.query(ApprovalRequest).filter(ApprovalRequest.id == approval_id).first()
+    try:
+        appr_uuid = _to_uuid(approval_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid approval UUID")
+
+    approval = db.query(ApprovalRequest).filter(ApprovalRequest.id == appr_uuid).first()
     if not approval:
         raise HTTPException(status_code=404, detail="Approval not found")
     if approval.status != "pending":

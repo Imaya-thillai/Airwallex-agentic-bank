@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Any
 import jwt
@@ -45,15 +46,15 @@ async def get_current_user(
     token: Optional[str] = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ):
-    """Get current authenticated user. Returns demo user if no token in DEMO_MODE."""
-    if settings.DEMO_MODE and not token:
-        from ..models.user import User
-        user = db.query(User).filter(User.email == "admin@stackai.demo").first()
-        if user:
-            return user
-        return _demo_user()
+    """Get current authenticated user. Returns demo user if no token or in DEMO_MODE."""
+    from ..models.user import User
 
     if not token:
+        if settings.DEMO_MODE:
+            user = db.query(User).filter(User.email == "admin@stackai.demo").first()
+            if user:
+                return user
+            return _demo_user()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
@@ -62,25 +63,43 @@ async def get_current_user(
 
     payload = decode_token(token)
     if not payload:
+        if settings.DEMO_MODE:
+            user = db.query(User).filter(User.email == "admin@stackai.demo").first()
+            return user or _demo_user()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    user_id = payload.get("sub")
-    if not user_id:
+    user_id_raw = payload.get("sub")
+    if not user_id_raw:
+        if settings.DEMO_MODE:
+            user = db.query(User).filter(User.email == "admin@stackai.demo").first()
+            return user or _demo_user()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
 
-    from ..models.user import User
-    user = db.query(User).filter(User.id == user_id).first()
+    # Safely convert to UUID object to satisfy SQLAlchemy's Uuid type processor
+    user = None
+    try:
+        user_uuid = uuid.UUID(str(user_id_raw))
+        user = db.query(User).filter(User.id == user_uuid).first()
+    except Exception:
+        # If user_id_raw is not a valid UUID (e.g. demo string or email)
+        user = db.query(User).filter(User.email == str(user_id_raw)).first()
+
     if not user:
+        if settings.DEMO_MODE:
+            user = db.query(User).filter(User.email == "admin@stackai.demo").first()
+            return user or _demo_user()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
     return user
 
 
 def _demo_user():
     class _User:
-        id = "demo-admin"
+        id = uuid.UUID("00000000-0000-0000-0000-000000000010")
         email = "admin@stackai.demo"
+        full_name = "Alex Admin"
         role = "admin"
-        tenant_id = "demo-tenant"
+        tenant_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
         is_active = True
     return _User()
 

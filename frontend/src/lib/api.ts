@@ -1,16 +1,16 @@
 import axios from 'axios'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const isBrowser = typeof window !== 'undefined'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || (isBrowser ? '' : 'http://127.0.0.1:8000')
 
 export const api = axios.create({
   baseURL: API_BASE,
-  timeout: 10000,
-  withCredentials: true,
+  timeout: 15000,
 })
 
 // Attach token from localStorage
 api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
+  if (isBrowser) {
     const token = localStorage.getItem('access_token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
@@ -19,13 +19,21 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Handle auth errors
+// If relative proxy fails, retry with direct 127.0.0.1:8000
 api.interceptors.response.use(
   (res) => res,
-  (err) => {
-    if (err.response?.status === 401 && typeof window !== 'undefined') {
+  async (err) => {
+    if (err.response?.status === 401 && isBrowser) {
       localStorage.removeItem('access_token')
     }
+    
+    // Auto fallback to direct IP if relative proxy had network error
+    if (isBrowser && (!err.response || err.code === 'ERR_NETWORK') && !err.config.__isRetry) {
+      err.config.__isRetry = true
+      err.config.baseURL = 'http://127.0.0.1:8000'
+      return axios(err.config)
+    }
+
     return Promise.reject(err)
   }
 )
